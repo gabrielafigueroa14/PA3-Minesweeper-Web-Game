@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>You Win!</title>
+  <style>
+    /* Centered container with a bright, celebratory theme */
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #e8f5e9;
+      font-family: 'Arial', sans-serif;
+      color: #2e7d32;
+    }
+    .container {
+      text-align: center;
+      background: #c8e6c9;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    p {
+      font-size: 1.2em;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 1em;
+      background: #66bb6a;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #fff;
+    }
+    button:hover {
+      background: #43a047;
+    }
+    audio {
+        margin-top: 15px;
+        outline: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>You Win!</h1>
+    <p>Your Score: {{ score }}</p>
+    <p>High Score: {{ high_score }}</p>
+    <p>Time: {{ time_elapsed }} seconds</p>
+    <p id="celebrationTimer">Celebrating for: 0 seconds</p> <!-- 🕒 Celebration Timer -->
+    <button onclick="tryAgain()">Play Again</button>
+  </div>
+
+   <!-- 🎶 Background Victory Music -->
+  <audio id="bgMusic" src="{{ url_for('static', filename='victory_music.mp3') }}" autoplay loop></audio>
+
+  <script>
+      // Timer for celebration time
+    let celebrationStartTime = Date.now();
+    let celebrationTimerInterval = setInterval(updateCelebrationTimer, 1000);
+
+    function updateCelebrationTimer() {
+      const elapsed = Math.floor((Date.now() - celebrationStartTime) / 1000);
+      document.getElementById('celebrationTimer').innerText = `Celebrating for: ${elapsed} seconds`;
+    }
+    function tryAgain() {
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>

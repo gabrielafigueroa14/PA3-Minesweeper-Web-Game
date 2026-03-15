@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minesweeper</title>
+  <style>
+    /* Overall green and colorful theme */
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #e8f5e9;
+      font-family: 'Arial', sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 10px;
+      color: #2e7d32;
+    }
+    .controls {
+      margin-bottom: 15px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+    /* Timer display styling */
+    #timer {
+      font-size: 1.2em;
+      color: #2e7d32;
+    }
+    /* Flag counter display styling */
+    #flagCounter {
+      font-size: 1.2em;
+      color: #2e7d32;
+    }
+    .board {
+      display: grid;
+      gap: 2px;
+      background: #66bb6a;
+      padding: 5px;
+      border-radius: 5px;
+    }
+    .cell {
+      width: 30px;
+      height: 30px;
+      background: #c8e6c9;
+      text-align: center;
+      line-height: 30px;
+      font-weight: bold;
+      border-radius: 3px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .cell:hover {
+      transform: scale(1.05);
+    }
+    .revealed {
+      background: #fff;
+      border: 1px solid #bbb;
+    }
+    .mine {
+      background: #e74c3c;
+      color: #fff;
+    }
+    .flagged {
+      background: #ffeb3b;
+      color: #000;
+    }
+    #message {
+      margin-top: 10px;
+      font-size: 1.2em;
+      font-weight: bold;
+      color: #d32f2f;
+    }
+    .board-win {
+      background-color: #ffd700;
+      border: 3px solid #fbc02d;
+      transition: background-color 0.5s ease;
+    }
+
+  </style>
+</head>
+<body>
+  <h1>Minesweeper</h1>
+  <div class="controls">
+    <!-- Difficulty selection -->
+    <label for="difficulty">Difficulty:</label>
+    <select id="difficulty">
+      <option value="easy">Easy</option>
+      <option value="medium">Medium</option>
+      <option value="hard">Hard</option>
+    </select>
+    <!-- New game button -->
+    <button id="newGame">New Game</button>
+    <!-- Flag counter display -->
+    <div id="flagCounter">Flags: 0 / 0</div>
+    <!-- Timer display -->
+    <div id="timer">Time: 0s</div>
+  </div>
+  <!-- Container for the game board -->
+  <div class="board" id="board"></div>
+  <!-- Message display for win/loss notifications -->
+  <div id="message"></div>
+
+  <script>
+    let boardData = [];
+    let gameStatus = 'continue';
+    let startTime = null;
+    let timerInterval = null;
+
+    /**
+     * newGame - Initializes a new game by sending a POST request to the /new_game endpoint.
+     * Resets the game state, starts the timer, updates the flag counter, and renders the board.
+     */
+    async function newGame() {
+      const difficulty = document.getElementById('difficulty').value;
+      const formData = new FormData();
+      formData.append('difficulty', difficulty);
+      const res = await fetch('/new_game', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      boardData = data.board;
+      gameStatus = 'continue';
+      document.getElementById('message').innerText = '';
+      updateFlagCounter();
+      resetTimer();
+      renderBoard();
+    }
+
+    /**
+     * renderBoard - Renders the game board on the page.
+     * Loops through boardData and creates div elements for each cell.
+     * Attaches left-click (to reveal) and right-click (to toggle flag) event listeners.
+     */
+    function renderBoard() {
+      const boardElem = document.getElementById('board');
+      boardElem.innerHTML = '';
+      boardElem.style.gridTemplateColumns = `repeat(${boardData[0].length}, 30px)`;
+      if (gameStatus === 'win') {
+        boardElem.classList.add('board-win');
+      } else {
+        boardElem.classList.remove('board-win');
+      }
+      boardData.forEach((row, r) => {
+        row.forEach((cell, c) => {
+          const cellElem = document.createElement('div');
+          cellElem.classList.add('cell');
+          cellElem.dataset.row = r;
+          cellElem.dataset.col = c;
+          if (cell.revealed) {
+            cellElem.classList.add('revealed');
+            if (cell.mine) {
+              cellElem.classList.add('mine');
+              cellElem.innerText = '💣';
+            } else if (cell.count > 0) {
+              cellElem.innerText = cell.count;
+            }
+          } else if (cell.flagged) {
+            cellElem.classList.add('flagged');
+            cellElem.innerText = '🚩';
+          }
+          cellElem.addEventListener('click', () => cellClicked(r, c));
+          cellElem.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            cellRightClicked(r, c);
+          });
+          boardElem.appendChild(cellElem);
+        });
+      });
+    }
+
+    /**
+     * cellClicked - Handles left-click events on a cell.
+     * Sends a request to /reveal to reveal the cell.
+     * Updates boardData and game status based on the server response.
+     * If the game is won or lost, stops the timer and redirects after a short delay.
+     */
+    async function cellClicked(row, col) {
+      if (gameStatus !== 'continue') return;
+      const res = await fetch('/reveal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ row: row, col: col })
+      });
+      const data = await res.json();
+      boardData = data.board;
+      gameStatus = data.status;
+      renderBoard();
+      updateFlagCounter();
+      if (gameStatus === 'game over' || gameStatus === 'win') {
+        stopTimer();
+        // Redirect based on game status and pass elapsed time as a query parameter.
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setTimeout(() => {
+          if (gameStatus === 'win') {
+            window.location.href = '/won_screen?time=' + elapsed;
+          } else {
+            window.location.href = '/game_over_page?time=' + elapsed;
+          }
+        }, 1000);
+      }
+    }
+
+    /**
+     * cellRightClicked - Handles right-click events to toggle flag status.
+     * Sends a request to /toggle_flag and updates the board accordingly.
+     */
+    async function cellRightClicked(row, col) {
+      if (gameStatus !== 'continue') return;
+      const res = await fetch('/toggle_flag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ row: row, col: col })
+      });
+      const data = await res.json();
+      boardData = data.board;
+      renderBoard();
+      updateFlagCounter();
+    }
+
+    /**
+     * updateFlagCounter - Updates the flag counter display.
+     * Counts the flagged cells and shows them along with the total number of mines.
+     */
+    function updateFlagCounter() {
+      let flaggedCount = 0;
+      boardData.forEach(row => {
+        row.forEach(cell => {
+          if (cell.flagged) flaggedCount++;
+        });
+      });
+      let totalMines = boardData.reduce((sum, row) => sum + row.filter(cell => cell.mine).length, 0);
+      document.getElementById('flagCounter').innerText = `Flags: ${flaggedCount} / ${totalMines}`;
+    }
+
+    /**
+     * resetTimer - Resets and starts the game timer.
+     * Updates the timer display every second.
+     */
+    function resetTimer() {
+      startTime = Date.now();
+      document.getElementById('timer').innerText = 'Time: 0s';
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        let elapsed = Math.floor((Date.now() - startTime) / 1000);
+        document.getElementById('timer').innerText = 'Time: ' + elapsed + 's';
+      }, 1000);
+    }
+
+    /**
+     * stopTimer - Stops the game timer.
+     */
+    function stopTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+    }
+
+    document.getElementById('newGame').addEventListener('click', newGame);
+    newGame();
+
+    document.addEventListener('keydown', async function(event) {
+      if (event.key === 'c' || event.key === 'C') {
+        if (gameStatus !== 'continue') return;
+        try {
+          const res = await fetch('/cheat');
+          const data = await res.json();
+          const bombs = data.bombs;
+          bombs.forEach(bomb => {
+            const selector = `[data-row="${bomb.row}"][data-col="${bomb.col}"]`;
+            const cell = document.querySelector(selector);
+            if (cell) {
+              cell.style.backgroundColor = '#ff5252';
+              cell.innerText = '💣';
+            }
+          });
+        } catch (error) {
+          console.error('Error fetching cheat data:', error);
+        }
+      }
+    });
+
+  </script>
+</body>
+</html>
